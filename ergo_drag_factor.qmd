@@ -1,0 +1,172 @@
+---
+title: "Analysis of drag factors on ergs"
+author: "Michele Adamoli"
+date: 03/07/2005
+date-format: "MMM D, YYYY"
+format:
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+fig-cap-location: top
+execute: 
+  warning: false
+  message: false
+  echo: false
+---
+
+# Intro
+
+The idea is to collect some data on Concept2 Erg and make some superficial analysis.
+
+# Results
+
+These plots show the average force over the stroke, according different drag factors.
+
+
+```{r}
+
+# Load packages
+
+library(pacman)
+
+p_load("tidyverse", "openxlsx", "janitor", "DT")
+
+```
+
+
+```{r}
+# Read data
+
+input_data <- "input/Michele Testing.xlsx"
+
+# Set tolerance in seconds for determinings groups
+
+tolerance <- 1.2
+
+# Function to read data from the eXcel input file
+
+fn_read_data <- function(sheet){
+
+d_DRAG_IMP <- read.xlsx(input_data, sheet = sheet) %>% 
+  clean_names() %>% 
+  as_tibble() 
+
+d_DRAG_IMP %>% 
+  select(drag_factor, avg_pace_per500m_dp, stroke_rate, stroke_length, contains("x1"), -x140) %>% 
+  mutate(pace = case_when((avg_pace_per500m_dp < 130 + tolerance &
+                   avg_pace_per500m_dp > 130 - tolerance) ~ "2:10",
+                   (avg_pace_per500m_dp < 125 + tolerance &
+                   avg_pace_per500m_dp > 125 - tolerance) ~ "2:05",
+                   (avg_pace_per500m_dp < 115 + tolerance &
+                   avg_pace_per500m_dp > 115 - tolerance) ~ "1:55")) %>% 
+  filter(!is.na(pace)) %>% 
+  rowid_to_column() %>% 
+  pivot_longer(contains("x1"), values_to = "OBS_VALUE", names_to = "TIME") %>% 
+  mutate(TIME = str_replace(TIME, "x", "")) %>% 
+  mutate(TIME = as.numeric(TIME) * 0.015625) %>% 
+  mutate(drag_factor = as.character(drag_factor)) 
+
+}
+
+# Run the function trought all sheets and get all in a single dataframe
+
+vec_sheet <- getSheetNames(input_data)
+
+d_DRAG_0 <- vec_sheet %>%
+  map_dfr(fn_read_data)
+
+# Average force
+
+d_DRAG_1 <- d_DRAG_0 %>% 
+  group_by(pace, TIME, drag_factor) %>% 
+  summarise(OBS_VALUE = mean(OBS_VALUE, na.rm = TRUE)) %>% 
+  ungroup()
+```
+
+
+```{r}
+#| label: fig-2
+#| fig-cap: "Force curves across different drag factors and paces"
+
+# Plot 
+
+d_DRAG_1 %>% 
+  rename(Force = OBS_VALUE) %>% 
+  rename(Time = TIME) %>% 
+  ggplot(aes(x = Time, y = Force, colour = drag_factor, group = drag_factor)) +
+  geom_line() +
+  facet_wrap(~pace) +
+  theme_minimal()
+```
+
+
+The more you push the faster you are.... ?
+
+```{r}
+#| label: tbl-1
+#| tbl-cap: Average force (N) across different paces and drag factors
+
+# Average force
+
+d_DRAG_0 %>% 
+  group_by(pace, drag_factor) %>% 
+  summarise(OBS_VALUE = round(mean(OBS_VALUE, na.rm = TRUE), digits = 1)) %>% 
+  ungroup() %>%
+  pivot_wider(names_from = drag_factor, values_from = OBS_VALUE) %>% 
+  datatable(option = list(dom = "t"), rownames = FALSE)
+```
+
+
+```{r}
+#| label: tbl-2
+#| tbl-cap: Peak force (N) across different paces and drag factors
+
+# Maximale force
+
+d_DRAG_0 %>% 
+  group_by(pace, drag_factor) %>% 
+  summarise(OBS_VALUE = round(max(OBS_VALUE, na.rm = TRUE), digits = 1)) %>% 
+  ungroup() %>%
+  pivot_wider(names_from = drag_factor, values_from = OBS_VALUE) %>% 
+  datatable(option = list(dom = "t"), rownames = FALSE)
+```
+
+Faster stroke rate faster pace?
+
+```{r}
+#| label: tbl-3
+#| tbl-cap: Stroke rates across paces and drag factors
+
+# Stroke rate
+
+d_DRAG_0 %>% 
+  group_by(pace, drag_factor) %>% 
+  summarise(stroke_rate  = round(mean(stroke_rate , na.rm = TRUE), digits = 1)) %>% 
+  ungroup() %>%
+  pivot_wider(names_from = drag_factor, values_from = stroke_rate) %>% 
+  datatable(option = list(dom = "t"), rownames = FALSE)
+```
+
+
+Was ist "stroke lenght?"
+
+```{r}
+#| label: tbl-4
+#| tbl-cap: Stroke lenghts across paces and drag factors
+
+# Stroke rate
+
+d_DRAG_0 %>% 
+  group_by(pace, drag_factor) %>% 
+  summarise(stroke_length  = round(mean(stroke_length , na.rm = TRUE), digits = 1)) %>% 
+  ungroup() %>%
+  pivot_wider(names_from = drag_factor, values_from = stroke_length) %>% 
+  datatable(option = list(dom = "t"), rownames = FALSE)
+
+
+ 
+```
+
+# Credits
+
+Thank you very much to Peter Fritsch.
